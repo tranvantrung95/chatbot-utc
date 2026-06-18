@@ -1,0 +1,17 @@
+graph TB
+    Q["Query (Q)"] --> MATMUL["MatMul
+Q × K<sup>T</sup>"]
+    K["Key (K)"] --> MATMUL
+    MATMUL --> SCALE["Scale
+÷ √d<sub>k</sub>"]
+    SCALE --> MASK["Mask (opt.)"]
+    MASK --> SOFTMAX["Softmax"]
+    SOFTMAX --> MATMUL2["MatMul"]
+    V["Value (V)"] --> MATMUL2
+    MATMUL2 --> OUT["Attention
+Output"]
+    
+    style Q fill:#bbdefb
+    style K fill:#c8e6c9
+    style V fill:#ffccbc
+    style OUT fill:#e1bee7

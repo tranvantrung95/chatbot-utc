@@ -1,0 +1,117 @@
+[
+  {
+    "question": "Học phí một kỳ là bao nhiêu?",
+    "rag": {
+      "answer": "Xin lỗi, tôi chưa có thông tin về mức học phí một kỳ cụ thể. Bạn vui lòng liên hệ trực tiếp với nhà trường qua website utc.edu.vn hoặc số điện thoại (024) 37663311 để được hỗ trợ.",
+      "time_sec": 4.5,
+      "tokens_est": 6103,
+      "sources": [
+        {
+          "title": "Phần 2.1. Quy chế đào tạo đại học (p.5)",
+          "score": 0.03278688524590164
+        },
+        {
+          "title": "X. Ký túc xá (p.2)",
+          "score": 0.03200204813108039
+        },
+        {
+          "title": "Phần 2.6. Quy định về chế độ chính sách (p.4)",
+          "score": 0.02946912242686891
+        }
+      ]
+    },
+    "wiki": {
+      "answer": "Wiki hiện chưa có thông tin về học phí một kỳ cụ thể. Thông tin chỉ đề cập đến học phí năm học 2025-2026 được xác định theo quy định của Nhà nước và Trường Đại học Giao thông vận tải. Bạn có thể tham khảo bảng giá học phí do Nhà trường công bố để biết chi tiết về học phí một kỳ.",
+      "time_sec": 13.0,
+      "tokens_est": 3735,
+      "sources": [
+        {
+          "title": "xiiihọcphí-họcbổngtrợcấp.md",
+          "score": 1.0
+        },
+        {
+          "title": "truongdaihocgtvt.md",
+          "score": 1.0
+        },
+        {
+          "title": "quycchetruong.md",
+          "score": 1.0
+        }
+      ]
+    }
+  },
+  {
+    "question": "Làm sao để đăng ký ký túc xá?",
+    "rag": {
+      "answer": "✅ Tóm tắt / Trả lời chính\n\nSinh viên thực hiện đăng ký nội trú online bằng cách đăng nhập vào hệ thống https://sis.utc.edu.vn với tài khoản được Nhà trường cấp. Chọn chức năng “Nội trú” → Đăng ký nội trú dành cho sinh viên đăng ký mới → Lựa chọn loại phòng → Kích đăng ký. Sau khi được Ban Quản lý KTX duyệt, sinh viên cần đóng các loại phí và hoàn thiện hồ sơ gồm: Đơn xin ở nội trú, bản phó tổ các giấy tờ liên quan. Khi nhận phòng, phải ký biên bản giao nhận tài sản trong phòng.",
+      "time_sec": 17.05,
+      "tokens_est": 4935,
+      "sources": [
+        {
+          "title": "X. Ký túc xá",
+          "score": 0.03278688524590164
+        },
+        {
+          "title": "X. Ký túc xá (p.2)",
+          "score": 0.03225806451612903
+        },
+        {
+          "title": "XII. Chăm sóc y tế - thanh toán bảo hiểm (p.2)",
+          "score": 0.03125763125763126
+        }
+      ]
+    },
+    "wiki": {
+      "answer": "Để đăng ký ký túc xá, bạn cần chuẩn bị một số giấy tờ và thực hiện các bước sau:\n\n- Mang theo giấy tờ tùy thân (CMND/CCCD), chứng minh thư sinh viên.\n- Chuẩn bị bản sao công chứng hồ sơ nhập học.\n- Truy cập bộ phận quản lý Ký túc xá để nộp hồ sơ đăng ký.\n\nWiki hiện chưa có thông tin chi tiết về thời gian và địa điểm cụ thể để đăng ký.",
+      "time_sec": 12.07,
+      "tokens_est": 2317,
+      "sources": [
+        {
+          "title": "xkýtúcxá.md",
+          "score": 1.0
+        },
+        {
+          "title": "itàikhoảnquảnlýđàotạovàđăngkýh.md",
+          "score": 1.0
+        }
+      ]
+    }
+  },
+  {
+    "question": "Quên mật khẩu tài khoản QLĐT thì làm thế nào?",
+    "rag": {
+      "answer": "✅ Tóm tắt / Trả lời chính\n\nĐể lấy lại mật khẩu tài khoản QLĐT, bạn có thể thực hiện theo một trong hai cách:\n\n1. Đăng ký địa chỉ email và nhận mật khẩu mới qua email.\n2. Nộp lệ phí 50.000đ tại phòng Tài chính kế toán (P103 - Nhà A1) để được cập lại mật khẩu.\n\nNếu quên mật khẩu, hệ thống sẽ gửi mật khẩu mới vào email bạn đã đăng ký.",
+      "time_sec": 17.0,
+      "tokens_est": 5632,
+      "sources": [
+        {
+          "title": "I. Tài khoản quản lý đào tạo và đăng ký học",
+          "score": 0.03278688524590164
+        },
+        {
+          "title": "XIV. Email sinh viên",
+          "score": 0.03225806451612903
+        },
+        {
+          "title": "XV. Tài liệu hướng dẫn cài đặt và sử dụng APP eUTC (p.2)",
+          "score": 0.03149801587301587
+        }
+      ]
+    },
+    "wiki": {
+      "answer": "Nếu bạn quên mật khẩu tài khoản quản lý đào tạo, hãy thực hiện các bước sau:\n\n1. Truy cập vào trang web chính thức của Trường Đại học Giao thông vận tải.\n2. Nhấp vào mục \"Quên mật khẩu\" hoặc tương tự trên thanh menu.\n3. Theo dõi hướng dẫn để khôi phục mật khẩu.\n\nWiki hiện chưa có thông tin chi tiết về các bước cụ thể trong quá trình khôi phục mật khẩu, nhưng bạn có thể liên hệ với bộ phận hỗ trợ sinh viên của UTC nếu cần thêm giúp đỡ.",
+      "time_sec": 11.28,
+      "tokens_est": 2492,
+      "sources": [
+        {
+          "title": "itàikhoảnquảnlýđàotạovàđăngkýh.md",
+          "score": 1.0
+        },
+        {
+          "title": "xvtàiliệuhướngdẫncàiđặtvàsửdụn.md",
+          "score": 1.0
+        }
+      ]
+    }
+  }
+]

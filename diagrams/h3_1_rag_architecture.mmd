@@ -1,0 +1,31 @@
+graph TB
+    subgraph Offline["TIỀN XỬ LÝ (Offline)"]
+        direction TB
+        PDF["📄 Sổ tay SV
+(92 trang PDF)"] --> OCR["OCR
+Marker-PDF"]
+        OCR --> CHUNK["Structured Chunking
+(Phần → Chương → Mục)"]
+        CHUNK --> EMB["Embedding
+BAAI/bge-m3 (1024d)"]
+        EMB --> STORE[("ChromaDB
+Vector Store")]
+    end
+    
+    subgraph Online["TRUY VẤN (Online)"]
+        direction TB
+        QUERY["❓ Câu hỏi
+người dùng"] --> QEMB["Query Embedding"]
+        QEMB --> RET["Retrieval
+(similarity search)"]
+        STORE --> RET
+        RET --> RERANK["LLM Reranker
+(chọn top-K)"]
+        RERANK --> GEN["LLM Generation
+qwen35-opus"]
+        GEN --> ANSWER["✅ Câu trả lời
++ Nguồn tham khảo"]
+    end
+    
+    style Offline fill:#e8eaf6
+    style Online fill:#e8f5e9

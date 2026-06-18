@@ -1,0 +1,19 @@
+graph TB
+    SV["🎓 Sinh viên"] --> UC1["Gửi câu hỏi
+bằng tiếng Việt"]
+    SV --> UC2["Nhận câu trả lời
+(streaming SSE)"]
+    SV --> UC3["Xem nguồn
+tham khảo"]
+    SV --> UC4["Đánh giá
+(thumbs up/down)"]
+    SV --> UC5["Xem câu hỏi
+gợi ý"]
+    
+    UC1 -.->|"include"| QUERY["Query Processing
++ Topic Filter"]
+    QUERY -.->|"include"| RETRIEVE["Retrieval
+(3 tầng)"]
+    RETRIEVE -.->|"include"| GEN["LLM Generation"]
+    
+    style SV fill:#e3f2fd

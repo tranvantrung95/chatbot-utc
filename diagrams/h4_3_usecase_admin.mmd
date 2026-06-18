@@ -1,0 +1,17 @@
+graph TB
+    ADMIN["🔧 Quản trị viên"] --> UC1["Đăng nhập
+(token-based)"]
+    ADMIN --> UC2["Xem Dashboard
+thống kê"]
+    ADMIN --> UC3["Upload tài liệu
+PDF mới"]
+    ADMIN --> UC4["Re-index
+cơ sở tri thức"]
+    ADMIN --> UC5["Test truy vấn
+(không qua chatbot)"]
+    
+    UC3 -.->|"include"| OCR["OCR + Chunking
+Pipeline"]
+    UC4 -.->|"include"| OCR
+    
+    style ADMIN fill:#fff3e0

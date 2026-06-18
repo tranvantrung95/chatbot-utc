@@ -1,0 +1,93 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>UTC Autotest 20260530_233814</title>
+<style>body{font-family:system-ui;max-width:900px;margin:2rem auto;padding:0 1rem;background:#f8fafc;color:#0f172a}
+h1{color:#0f294a}h2{color:#00828a;margin-top:2rem}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}
+.card{background:#fff;border-radius:8px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.card .label{font-size:.8rem;color:#64748b}.card .value{font-size:1.5rem;font-weight:bold}
+.good{color:#059669}.warn{color:#f59e0b}.bad{color:#dc2626}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+th,td{padding:.5rem .75rem;text-align:left;font-size:.85rem}th{background:#0f294a;color:#fff}
+tr:nth-child(even){background:#f1f5f9}
+</style></head><body>
+<h1>🧪 UTC Assistant Autotest Report</h1>
+<p>30/05/2026 23:38 | 10 users × 10 questions | 5 concurrent | 451s</p>
+
+<h2>📊 Performance</h2>
+<div class="metrics">
+<div class="card"><div class="label">P50 Latency</div><div class="value">18.33s</div></div>
+<div class="card"><div class="label">P95 Latency</div><div class="value">61.05s</div></div>
+<div class="card"><div class="label">Avg Latency</div><div class="value">22.68s</div></div>
+<div class="card"><div class="label">Error Rate</div><div class="value good">2.0%</div></div>
+<div class="card"><div class="label">Throughput</div><div class="value">0.22 req/s</div></div>
+<div class="card"><div class="label">Min/Max</div><div class="value">9.24/70.37s</div></div>
+</div>
+
+<h2>🎯 Quality</h2>
+<div class="metrics">
+<div class="card"><div class="label">Fallback Rate</div><div class="value good">7.1%</div></div>
+<div class="card"><div class="label">Keyword Match</div><div class="value warn">63.3%</div></div>
+<div class="card"><div class="label">Length OK</div><div class="value">100.0%</div></div>
+<div class="card"><div class="label">Avg Sources</div><div class="value">5</div></div>
+<div class="card"><div class="label">Avg Answer Len</div><div class="value">1253.0c</div></div>
+<div class="card"><div class="label">Forbidden Words</div><div class="value bad">4</div></div>
+</div>
+
+<h2>🔧 Stability</h2>
+<div class="metrics">
+<div class="card"><div class="label">Rate Limit 429</div><div class="value">0</div></div>
+<div class="card"><div class="label">Server 5xx</div><div class="value">2</div></div>
+</div>
+
+<h2>📋 Per-Question</h2>
+<table><tr><th>ID</th><th>Topic</th><th>Question</th><th>Count</th><th>Avg Lat</th><th>Fallback%</th><th>Match%</th></tr>
+<tr><td>A1</td><td>Học phí</td><td>Học phí UTC đóng như thế nào?</td><td>1</td><td>30.7s</td><td>0%</td><td>100%</td></tr>
+<tr><td>A2</td><td>Học phí</td><td>Học phí một tín chỉ bao nhiêu tiền?</td><td>2</td><td>12.1s</td><td>0%</td><td>100%</td></tr>
+<tr><td>A3</td><td>Học phí</td><td>Làm sao để đóng học phí online?</td><td>3</td><td>26.0s</td><td>0%</td><td>100%</td></tr>
+<tr><td>A4</td><td>Học phí</td><td>Hạn đóng học phí là khi nào?</td><td>4</td><td>14.1s</td><td>25%</td><td>0%</td></tr>
+<tr><td>A5</td><td>Học phí</td><td>Không đóng học phí đúng hạn có sao không?</td><td>5</td><td>17.1s</td><td>40%</td><td>0%</td></tr>
+<tr><td>A6</td><td>Học phí</td><td>Học phí có được miễn giảm không?</td><td>6</td><td>27.4s</td><td>0%</td><td>100%</td></tr>
+<tr><td>A7</td><td>Học phí</td><td>Sinh viên nghèo có được giảm học phí?</td><td>7</td><td>21.5s</td><td>0%</td><td>14%</td></tr>
+<tr><td>A8</td><td>Học phí</td><td>Đóng học phí trễ có bị phạt không?</td><td>8</td><td>17.4s</td><td>25%</td><td>0%</td></tr>
+<tr><td>B1</td><td>Điểm số</td><td>Cách tính điểm trung bình tích lũy?</td><td>9</td><td>25.7s</td><td>0%</td><td>100%</td></tr>
+<tr><td>B2</td><td>Điểm số</td><td>Điểm F có được học lại không?</td><td>10</td><td>46.0s</td><td>20%</td><td>90%</td></tr>
+<tr><td>B3</td><td>Điểm số</td><td>Bao nhiêu điểm thì được xếp loại khá?</td><td>9</td><td>17.8s</td><td>0%</td><td>44%</td></tr>
+<tr><td>B4</td><td>Điểm số</td><td>Điểm D có phải học lại không?</td><td>8</td><td>17.2s</td><td>0%</td><td>100%</td></tr>
+<tr><td>B5</td><td>Điểm số</td><td>Thang điểm 4 quy đổi thế nào?</td><td>7</td><td>25.6s</td><td>0%</td><td>100%</td></tr>
+<tr><td>B6</td><td>Điểm số</td><td>Có được học cải thiện điểm không?</td><td>6</td><td>16.6s</td><td>0%</td><td>100%</td></tr>
+<tr><td>B7</td><td>Điểm số</td><td>Điều kiện để được xét tốt nghiệp là gì?</td><td>4</td><td>17.3s</td><td>0%</td><td>0%</td></tr>
+<tr><td>B8</td><td>Điểm số</td><td>Điểm rèn luyện ảnh hưởng gì đến xếp loại?</td><td>3</td><td>24.1s</td><td>0%</td><td>100%</td></tr>
+<tr><td>C1</td><td>Đào tạo</td><td>Thời gian đào tạo đại học tối đa là bao lâu?</td><td>3</td><td>13.8s</td><td>0%</td><td>0%</td></tr>
+<tr><td>C2</td><td>Đào tạo</td><td>Hệ thống tín chỉ là gì?</td><td>2</td><td>15.5s</td><td>0%</td><td>100%</td></tr>
+<tr><td>C3</td><td>Đào tạo</td><td>Có được học cùng lúc 2 ngành không?</td><td>1</td><td>12.9s</td><td>0%</td><td>100%</td></tr>
+<tr><td>C4</td><td>Đào tạo</td><td>Điều kiện để chuyển ngành học?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>C5</td><td>Đào tạo</td><td>Học kỳ phụ là gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>C6</td><td>Đào tạo</td><td>Sinh viên được nghỉ học tối đa bao lâu?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>C7</td><td>Đào tạo</td><td>Cảnh báo học tập là gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>C8</td><td>Đào tạo</td><td>Cách đăng ký học phần trên QLĐT?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D1</td><td>Thủ tục</td><td>Thủ tục xin xác nhận sinh viên như thế nào?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D2</td><td>Thủ tục</td><td>Làm sao để lấy lại mật khẩu tài khoản QLĐT?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D3</td><td>Thủ tục</td><td>Thủ tục cấp thẻ sinh viên mới?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D4</td><td>Thủ tục</td><td>Cần giấy tờ gì để xin nghỉ học tạm thời?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D5</td><td>Thủ tục</td><td>Thủ tục đăng ký ngoại trú?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D6</td><td>Thủ tục</td><td>Làm sao xin giấy giới thiệu thực tập?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D7</td><td>Thủ tục</td><td>Hồ sơ nhập học gồm những gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>D8</td><td>Thủ tục</td><td>Thủ tục chuyển trường như thế nào?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E1</td><td>Ký túc xá</td><td>Đăng ký ký túc xá như thế nào?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E2</td><td>Ký túc xá</td><td>Giá ký túc xá UTC bao nhiêu?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E3</td><td>Ký túc xá</td><td>Ký túc xá UTC ở đâu?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E4</td><td>Ký túc xá</td><td>Điều kiện ở ký túc xá là gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E5</td><td>Ký túc xá</td><td>Ký túc xá có wifi không?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>E6</td><td>Ký túc xá</td><td>Mấy người một phòng ký túc xá?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F1</td><td>Học bổng</td><td>Có những loại học bổng nào ở UTC?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F2</td><td>Học bổng</td><td>Điều kiện để được học bổng khuyến khích học tập?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F3</td><td>Học bổng</td><td>Mức học bổng khuyến khích học tập là bao nhiêu?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F4</td><td>Học bổng</td><td>Học bổng chính sách dành cho ai?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F5</td><td>Học bổng</td><td>Khi nào nhận được tiền học bổng?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>F6</td><td>Học bổng</td><td>Sinh viên năm nhất có được học bổng không?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G1</td><td>Khác</td><td>Email sinh viên UTC là gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G2</td><td>Khác</td><td>Số điện thoại phòng đào tạo?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G3</td><td>Khác</td><td>Làm sao liên hệ phòng công tác sinh viên?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G4</td><td>Khác</td><td>Trường UTC có những khoa nào?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G5</td><td>Khác</td><td>Thư viện UTC mở cửa khi nào?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+<tr><td>G6</td><td>Khác</td><td>App eUTC dùng để làm gì?</td><td>0</td><td>0.0s</td><td>0%</td><td>0%</td></tr>
+</table></body></html>

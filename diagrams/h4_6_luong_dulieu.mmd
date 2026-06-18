@@ -1,0 +1,21 @@
+graph LR
+    PDF["📄 Sổ tay SV
+(92 trang PDF)"] --> OCR["Marker-PDF
+(OCR + cấu trúc)"]
+    OCR --> TOC["Trích xuất
+Mục lục (TOC JSON)"]
+    TOC --> CHUNK["Structured Chunking
+(Phần → Chương → Mục)"]
+    CHUNK --> META["Gán metadata
+(phan_so, title, page)"]
+    META --> EMBED["Embedding
+(bge-m3 → 1024d)"]
+    EMBED --> CHROMA[("ChromaDB
+Collection: utc_knowledge")]
+    
+    CHROMA -->|"sẵn sàng truy vấn"| DONE["✅ Cơ sở tri thức
+sẵn sàng"]
+    
+    style PDF fill:#e3f2fd
+    style CHROMA fill:#c8e6c9
+    style DONE fill:#a5d6a7

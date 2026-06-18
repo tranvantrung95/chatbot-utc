@@ -1,0 +1,36 @@
+flowchart LR
+    USER["Nguoi dung"] --> API["FastAPI chat API"]
+    API --> CLASSIFIER["Intent Classifier<br/>supervised"]
+    CLASSIFIER --> POLICY["Route Policy<br/>rule + score"]
+
+    POLICY -->|RAG noi bo| RAG["Hybrid Retrieve + Rerank"]
+    POLICY -->|Ca nhan hoa| STUDENT["Student Context Builder"]
+    POLICY -->|Web first| WEB["Web Search<br/>allowlist + general web"]
+    POLICY -->|Ngoai mien| FALLBACK["Direct fallback / refusal"]
+
+    STUDENT --> RAG
+    RAG --> LLM["vLLM / LLM answer synthesis"]
+    WEB --> LLM
+    FALLBACK --> LLM
+    LLM --> UI["Frontend chatbot"]
+
+    API --> LOGS[("Router events / feedback / conversations")]
+
+    LOGS --> DATASET["Dataset Builder"]
+    DATASET --> TRAIN["Train intent classifier"]
+    TRAIN --> MODELS[("Model registry / artifacts")]
+    MODELS --> CLASSIFIER
+    MODELS --> POLICY
+
+    LOGS --> CLUSTER["Offline clustering<br/>unsupervised discovery"]
+    CLUSTER --> REPORT["Cluster report / knowledge gaps"]
+    REPORT --> KB["Cap nhat knowledge base"]
+    KB --> RAG
+
+    style CLASSIFIER fill:#e8f1ff,stroke:#2563eb,stroke-width:1px
+    style POLICY fill:#eefbf3,stroke:#16a34a,stroke-width:1px
+    style WEB fill:#fff7e8,stroke:#d97706,stroke-width:1px
+    style RAG fill:#fff7e8,stroke:#d97706,stroke-width:1px
+    style LLM fill:#f5f3ff,stroke:#7c3aed,stroke-width:1px
+    style LOGS fill:#fff1f2,stroke:#e11d48,stroke-width:1px
+    style CLUSTER fill:#fff1f2,stroke:#e11d48,stroke-width:1px

@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "test_time": "2026-05-30T23:38:14.565090",
+    "total_users": 10,
+    "total_tasks": 100,
+    "completed": 100,
+    "concurrent": 5,
+    "duration_sec": 451.3
+  },
+  "performance": {
+    "p50_latency": 18.33,
+    "p95_latency": 61.05,
+    "p99_latency": 70.37,
+    "min_latency": 9.24,
+    "max_latency": 70.37,
+    "avg_latency": 22.68,
+    "error_rate": 0.02,
+    "throughput": 0.22
+  },
+  "quality": {
+    "fallback_count": 7,
+    "fallback_rate": 0.0714,
+    "keyword_match_count": 62,
+    "keyword_match_rate": 0.6327,
+    "length_ok_count": 98,
+    "length_ok_rate": 1.0,
+    "has_forbidden_count": 4,
+    "avg_sources": 5,
+    "avg_answer_len": 1253.0
+  },
+  "stability": {
+    "rate_limit_429": 0,
+    "server_errors_5xx": 2
+  }
+}

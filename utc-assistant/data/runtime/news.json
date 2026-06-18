@@ -1,0 +1,18 @@
+[
+  {
+    "id": "news-001",
+    "title": "Thông báo kế hoạch học tập học kỳ II",
+    "summary": "Sinh viên theo dõi mốc đăng ký học phần, lịch học chính thức và hướng dẫn điều chỉnh lớp học phần.",
+    "date": "18/05/2026",
+    "category": "Đào tạo",
+    "url": "https://www.utc.edu.vn/tin-tuc"
+  },
+  {
+    "id": "news-002",
+    "title": "Ngày hội tư vấn hướng nghiệp ngành giao thông vận tải",
+    "summary": "Chương trình kết nối sinh viên với doanh nghiệp, cựu sinh viên và các đơn vị tuyển dụng.",
+    "date": "14/05/2026",
+    "category": "Hoạt động",
+    "url": "https://www.utc.edu.vn/tin-tuc"
+  }
+]

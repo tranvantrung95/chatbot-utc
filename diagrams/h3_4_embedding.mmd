@@ -1,0 +1,26 @@
+graph LR
+    T1["Học phí được
+đóng theo kỳ"] --> EMB1["bge-m3
+Encoder"]
+    T2["Sinh viên nộp
+tiền học phí"] --> EMB2["bge-m3
+Encoder"]
+    T3["Quy định về
+ký túc xá UTC"] --> EMB3["bge-m3
+Encoder"]
+    
+    EMB1 --> V1["[0.12, -0.34, 0.87, ...]
+1024-dim vector"]
+    EMB2 --> V2["[0.15, -0.31, 0.82, ...]
+1024-dim vector"]
+    EMB3 --> V3["[-0.45, 0.21, -0.13, ...]
+1024-dim vector"]
+    
+    V1 -.->|"cosine sim = 0.94
+(gần nhau)"| V2
+    V1 -.->|"cosine sim = 0.12
+(xa nhau)"| V3
+    
+    style EMB1 fill:#bbdefb
+    style EMB2 fill:#bbdefb
+    style EMB3 fill:#bbdefb

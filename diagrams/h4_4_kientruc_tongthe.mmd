@@ -1,0 +1,118 @@
+flowchart LR
+    USER["Nguoi dung<br/>Sinh vien / Admin"] --> WEB
+
+    subgraph FE["Frontend - Next.js 15"]
+        direction TB
+        WEB["App Router UI<br/>student/*, admin/*"]
+        AUTH["AuthProvider<br/>Bearer token + localStorage"]
+        CHATUI["Chatbot UI<br/>HTTP + SSE"]
+        ADMINUI["Admin UI<br/>documents, users, dashboard"]
+    end
+
+    subgraph BE["Backend - FastAPI"]
+        direction TB
+        API["REST API + SSE<br/>api_server.py"]
+        SESSION["Session in-memory<br/>HTTP Bearer"]
+        CHATAPI["Chat endpoints<br/>/api/chat, /api/chat/stream"]
+        DOCAPI["Document endpoints<br/>/api/documents/*"]
+        ADMINAPI["Admin endpoints<br/>users, questions, feedback, bugs"]
+    end
+
+    subgraph ROUTER["Routing Layer"]
+        direction TB
+        CLASSIFIER["Intent Classifier<br/>heuristic + optional artifact"]
+        POLICY["Route Policy<br/>rule + retrieval probe"]
+        STUDENT["Student Context Builder"]
+    end
+
+    subgraph ORCH["Answer Orchestration"]
+        direction TB
+        STREAM["Streaming / Sync flow<br/>shared execution plan"]
+        ORCHESTRATOR["AgenticOrchestrator<br/>Validate & Retry Loop"]
+        RAG["UTCRAGPipeline<br/>hybrid retrieve + rerank"]
+        WEBSEARCH["Web Search<br/>allowlist + fallback"]
+        LLM["vLLM / OpenAI-compatible LLM<br/>answer synthesis"]
+        VALIDATOR["ValidationAgent<br/>faithfulness & relevance"]
+    end
+
+    subgraph STORE["Data Layer"]
+        direction TB
+        RAW[("Raw knowledge files<br/>data/raw/*.txt")]
+        JSONRT[("Runtime JSON<br/>users, news, questions,<br/>feedback, bugs, activities")]
+        ROUTERLOG[("router_events.jsonl<br/>route telemetry")]
+        SQLITE[("SQLite app.db<br/>conversations, messages,<br/>feedback_ratings, notifications")]
+        CHROMA[("ChromaDB<br/>persistent vector store")]
+    end
+
+    subgraph OFFLINE["Offline Training / Analytics"]
+        direction TB
+        DATASET["Dataset Builder<br/>build_dataset.py"]
+        TRAIN["Intent Trainer<br/>train_intent_classifier.py"]
+        MODELS[("Model artifacts<br/>models/*.joblib,json")]
+    end
+
+    subgraph AI["AI Services"]
+        direction TB
+        EMBED["Embedding API<br/>/v1/embeddings"]
+        OCR["Vision OCR service<br/>for PDF import/preprocessing"]
+    end
+
+    WEB --> AUTH
+    WEB --> CHATUI
+    WEB --> ADMINUI
+
+    AUTH --> API
+    CHATUI --> CHATAPI
+    ADMINUI --> DOCAPI
+    ADMINUI --> ADMINAPI
+
+    API --> SESSION
+    API --> CHATAPI
+    API --> DOCAPI
+    API --> ADMINAPI
+
+    CHATAPI --> CLASSIFIER
+    CLASSIFIER --> POLICY
+    POLICY --> STREAM
+    POLICY --> STUDENT
+    STUDENT --> STREAM
+
+    STREAM --> ORCHESTRATOR
+    ORCHESTRATOR --> RAG
+    ORCHESTRATOR --> WEBSEARCH
+    ORCHESTRATOR --> LLM
+    ORCHESTRATOR <--> VALIDATOR
+    VALIDATOR --> LLM
+    
+    RAG --> LLM
+    WEBSEARCH --> LLM
+
+    DOCAPI --> RAW
+    DOCAPI -. OCR PDF khi can .-> OCR
+    ADMINAPI --> JSONRT
+
+    STREAM --> SQLITE
+    STREAM --> JSONRT
+    STREAM --> ROUTERLOG
+    ORCHESTRATOR --> SQLITE
+    ORCHESTRATOR --> JSONRT
+    ORCHESTRATOR --> ROUTERLOG
+
+    RAG --> RAW
+    RAG --> CHROMA
+    RAG --> EMBED
+
+    ROUTERLOG --> DATASET
+    JSONRT --> DATASET
+    DATASET --> TRAIN
+    TRAIN --> MODELS
+    MODELS --> CLASSIFIER
+    MODELS --> POLICY
+
+    style FE fill:#e8f1ff,stroke:#3b82f6,stroke-width:1px
+    style BE fill:#eefbf3,stroke:#16a34a,stroke-width:1px
+    style ROUTER fill:#fff7e8,stroke:#d97706,stroke-width:1px
+    style ORCH fill:#fff7e8,stroke:#d97706,stroke-width:1px
+    style STORE fill:#fff1f2,stroke:#e11d48,stroke-width:1px
+    style OFFLINE fill:#fef3c7,stroke:#ca8a04,stroke-width:1px
+    style AI fill:#f5f3ff,stroke:#7c3aed,stroke-width:1px

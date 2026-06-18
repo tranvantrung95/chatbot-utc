@@ -1,0 +1,33 @@
+graph TB
+    NR["Naive RAG
+(cơ bản)"] --> AR["Advanced RAG
+(nâng cao)"]
+    NR --> MR["Modular RAG
+(mô-đun)"]
+    
+    subgraph NR_DETAIL["Naive RAG"]
+        N1["Indexing → Embedding
+→ Retrieval → Generate"]
+    end
+    
+    subgraph AR_DETAIL["Advanced RAG"]
+        A1["+ Query Expansion"]
+        A2["+ Hybrid Search
+(sparse + dense)"]
+        A3["+ LLM Reranker"]
+        A4["+ MMR diversification"]
+    end
+    
+    subgraph MR_DETAIL["Modular RAG"]
+        M1["+ Memory Module"]
+        M2["+ Routing Module"]
+        M3["+ Fusion Module"]
+    end
+    
+    NR --> NR_DETAIL
+    AR --> AR_DETAIL
+    MR --> MR_DETAIL
+    
+    style NR fill:#bbdefb
+    style AR fill:#c8e6c9
+    style MR fill:#ffccbc

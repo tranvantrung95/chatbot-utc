@@ -1,0 +1,27 @@
+graph LR
+    INPUT["Input"] --> L1["Linear Q₁,K₁,V₁"]
+    INPUT --> L2["Linear Q₂,K₂,V₂"]
+    INPUT --> L3["Linear Q₃,K₃,V₃..."]
+    INPUT --> LH["Linear Q<sub>h</sub>,K<sub>h</sub>,V<sub>h</sub>"]
+    
+    L1 --> H1["Scaled Dot-Product
+Attention (head₁)"]
+    L2 --> H2["Scaled Dot-Product
+Attention (head₂)"]
+    L3 --> H3["Scaled Dot-Product
+Attention (head₃)"]
+    LH --> HH["Scaled Dot-Product
+Attention (head<sub>h</sub>)"]
+    
+    H1 --> CONCAT["Concat"]
+    H2 --> CONCAT
+    H3 --> CONCAT
+    HH --> CONCAT
+    
+    CONCAT --> PROJ["Linear Projection
+W<sup>O</sup>"]
+    PROJ --> OUTPUT["Multi-Head
+Output"]
+    
+    style INPUT fill:#e3f2fd
+    style OUTPUT fill:#e8f5e9

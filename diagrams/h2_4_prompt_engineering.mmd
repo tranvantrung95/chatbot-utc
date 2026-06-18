@@ -1,0 +1,23 @@
+graph LR
+    USER["Người dùng
+(câu hỏi)"] --> ZS["Zero-shot
+(không ví dụ)"]
+    USER --> FS["Few-shot
+(2-5 ví dụ)"]
+    USER --> COT["Chain-of-Thought
+(suy luận từng bước)"]
+    
+    ZS --> LLM["LLM"]
+    FS --> LLM
+    COT --> LLM
+    
+    LLM --> ZSOUT["Trả lời đơn giản
+độ chính xác thấp"]
+    LLM --> FSOUT["Trả lời theo mẫu
+độ chính xác TB"]
+    LLM --> COTOUT["Suy luận chi tiết
+độ chính xác cao"]
+    
+    style USER fill:#e3f2fd
+    style LLM fill:#ffebee
+    style COTOUT fill:#c8e6c9

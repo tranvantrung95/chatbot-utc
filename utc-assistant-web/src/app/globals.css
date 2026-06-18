@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 214 66% 17%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 48% 96%;
+  --secondary-foreground: 213 66% 17%;
+  --muted: 214 32% 93%;
+  --muted-foreground: 215 16% 45%;
+  --accent: 214 50% 95%;
+  --accent-foreground: 214 66% 17%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 214 66% 17%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(0, 130, 138, 0.08), transparent 30rem),
+    linear-gradient(180deg, #f8fafc 0%, #eef4f7 100%);
+  color: hsl(var(--foreground));
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Typography polish */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+}
+
+p, li, figcaption, .text-balance {
+  text-wrap: pretty;
+}
+
+/* Tabular numbers for data displays */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Image outline for clarity on light backgrounds */
+img {
+  outline: 1px solid rgba(0, 0, 0, 0.06);
+  outline-offset: -1px;
+}
+
+/* Background patterns */
+.utc-grid-bg {
+  background-image:
+    linear-gradient(rgba(15, 41, 74, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 41, 74, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.rag-surface {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.92)),
+    radial-gradient(circle at 10% 10%, rgba(0, 130, 138, 0.1), transparent 24rem);
+}
+
+.rag-panel {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 44px rgba(15, 41, 74, 0.08);
+}
+
+.rag-dark-panel {
+  background:
+    linear-gradient(180deg, #0f294a 0%, #0b1f3a 100%);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 16px;
+  background: #0f294a;
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: top 0.2s;
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+/* AI answer styling */
+.ai-answer {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+
+/* Animations */
+@keyframes slide-left {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+.animate-slide-left { animation: slide-left 180ms ease-out; }
+.animate-scale-in   { animation: scale-in 160ms ease-out; }
+.animate-fade-in-up { animation: fade-in-up 300ms ease-out; }
+
+/* Skeleton loading */
+.skeleton {
+  animation: skeleton-pulse 2s ease-in-out infinite;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+}

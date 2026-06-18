@@ -1,0 +1,17 @@
+.env
+.DS_Store
+__pycache__/
+*.py[cod]
+
+venv/
+.venv/
+
+data/vector_db/
+data/processed/
+
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+*.log

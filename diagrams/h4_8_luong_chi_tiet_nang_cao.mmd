@@ -1,0 +1,62 @@
+flowchart TD
+    %% Node Definitions with shapes
+    Start(("● Bắt đầu cuộc trò chuyện")) --> Input["Nhập câu hỏi của Sinh viên"]
+    Input --> API["FastAPI Gateway / Auth Validation"]
+    
+    API --> Intent{"Ý định & Chủ đề?"}
+    
+    %% Intent paths
+    Intent -->|"Ngoài phạm vi (Out of Domain)"| DirectFallback{"Có thuộc miền UTC?"}
+    Intent -->|"Hỏi đáp nghiệp vụ"| RouteSelect{"Định tuyến nghiệp vụ"}
+    Intent -->|"Cá nhân hóa (Điểm, GPA,...)"| StudentCtx["Trích xuất Hồ sơ Sinh viên"]
+    
+    StudentCtx --> RouteSelect
+    
+    DirectFallback -->|Không| OutAnswer["Trả lời: direct_fallback<br/>(Xin lỗi, tôi chưa có thông tin...)"]
+    DirectFallback -->|Có| RouteSelect
+    
+    %% Routing and Retrieval
+    RouteSelect -->|"RAG Pipeline"| Retrieve["Tìm kiếm Hybrid (BM25 + Dense BGE-M3)"]
+    RouteSelect -->|"Web Search First"| WebQuery["Tìm kiếm Google (Bản quyền UTC)"]
+    
+    Retrieve --> RRF["Kết hợp thứ hạng (RRF Score)"]
+    RRF --> MMR["Khử trùng lặp & Rerank đa dạng (MMR)"]
+    MMR --> RerankLLM["Chấm điểm & Sắp xếp lại (LLM Reranker)"]
+    
+    %% Agentic Reasoning Loop
+    RerankLLM --> GenDraft["Tạo câu trả lời nháp (Generator LLM)"]
+    WebQuery --> GenDraft
+    
+    GenDraft --> Validate{"ValidationAgent đánh giá<br/>(Faithfulness & Relevance)"}
+    
+    %% Validation outcomes
+    Validate -->| "Không đạt (< 0.8) " | RetryCount{"Đã thử lại 2 lần?"}
+    Validate -->| "Đạt (>= 0.8) " | Finalize["Chuẩn hóa định dạng văn bản"]
+    
+    RetryCount -->|Chưa| Rewrite["Tăng Temp lên 0.5<br/>Nhúng critique sửa đổi"]
+    Rewrite --> GenDraft
+    
+    RetryCount -->|Rồi| Finalize
+    
+    Finalize --> StreamOut(("● Trả kết quả SSE Stream"))
+    OutAnswer --> StreamOut
+    
+    %% Database associations
+    Retrieve -.-> Chroma[("ChromaDB<br/>(Dense Vectors)")]
+    API -.-> SQLite[("SQLite app.db<br/>(Conversations & Users)")]
+    StreamOut -.-> Logs[("Runtime logs & Telemetry<br/>(router_events.jsonl)")]
+
+    %% Styling
+    classDef startEnd fill:#f1f5f9,stroke:#64748b,stroke-width:2px,color:#334155;
+    classDef process fill:#eff6ff,stroke:#3b82f6,stroke-width:2px,color:#1e40af;
+    classDef decision fill:#fffbeb,stroke:#d97706,stroke-width:2px,color:#92400e;
+    classDef db fill:#fff1f2,stroke:#f43f5e,stroke-width:2px,color:#9f1239;
+    classDef action fill:#ecfdf5,stroke:#10b981,stroke-width:2px,color:#065f46;
+    classDef fallback fill:#fef2f2,stroke:#ef4444,stroke-width:2px,color:#991b1b;
+    
+    class Start,StreamOut startEnd;
+    class Input,API,StudentCtx,Retrieve,RRF,MMR,RerankLLM,GenDraft,Rewrite,Finalize process;
+    class Intent,DirectFallback,RouteSelect,Validate,RetryCount decision;
+    class Chroma,SQLite,Logs db;
+    class WebQuery action;
+    class OutAnswer fallback;

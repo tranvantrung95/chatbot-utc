@@ -1,0 +1,27 @@
+graph TB
+    QUERY["❓ Câu hỏi"] --> QE["Query Expansion
+(từ đồng nghĩa VN)"]
+    QE --> TF["Topic Filter
+(lọc theo metadata)"]
+    TF --> T1["Tầng 1: Bi-encoder
+Dense Retrieval (bge-m3)"]
+    TF --> T2["Tầng 2: BM25
+Sparse Retrieval"]
+    T1 --> RRF["RRF Fusion
+(kết hợp kết quả)"]
+    T2 --> RRF
+    RRF --> T3["Tầng 3: LLM Reranker
+(chọn top-K cuối)"]
+    T3 --> MMR["MMR
+(đa dạng hóa)"]
+    MMR --> CTX["Ngữ cảnh
+(context)"]
+    CTX --> GEN["LLM Generation
+qwen35-opus"]
+    GEN --> ANS["✅ Câu trả lời
++ trích dẫn nguồn"]
+    
+    style T1 fill:#bbdefb
+    style T2 fill:#c8e6c9
+    style T3 fill:#ffccbc
+    style GEN fill:#e1bee7
