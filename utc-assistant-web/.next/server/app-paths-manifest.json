@@ -1,9 +1,3 @@
 {
-  "/login/page": "app/login/page.js",
-  "/student/chatbot/page": "app/student/chatbot/page.js",
-  "/student/news/page": "app/student/news/page.js",
-  "/student/feedback/page": "app/student/feedback/page.js",
-  "/student/dashboard/page": "app/student/dashboard/page.js",
-  "/student/bug-report/page": "app/student/bug-report/page.js",
-  "/student/account/page": "app/student/account/page.js"
+  "/student/chatbot/page": "app/student/chatbot/page.js"
 }

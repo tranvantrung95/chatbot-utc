@@ -6,6 +6,7 @@ import bcrypt
 import json
 import threading
 import time
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
@@ -222,21 +223,23 @@ def _retrieve_internal_candidates(
     question: str,
     top_k: int,
 ) -> list[dict[str, Any]]:
-    retrieved = pipeline._hybrid_retrieve(question, top_k=top_k)
+    fetch_k = max(10, top_k * 2)
+    retrieved = pipeline._hybrid_retrieve(question, top_k=fetch_k)
     if retrieved and all(float(item.get("score", 0.0)) < 0.016 for item in retrieved):
-        dense_only = pipeline.retrieve(question, top_k=top_k)
+        dense_only = pipeline.retrieve(question, top_k=fetch_k)
         if dense_only and not any(item.get("type") == "web" for item in dense_only):
             retrieved = dense_only
 
-    if len(retrieved) > 5 and not any(item.get("type") == "web" for item in retrieved):
+    if len(retrieved) > 0 and not any(item.get("type") == "web" for item in retrieved):
         try:
-            from src.deep_reranker import get_llm_reranker
+            from src.deep_reranker import get_local_reranker
 
-            reranker = get_llm_reranker(pipeline)
-            retrieved = reranker.rerank(question, retrieved[:10], top_k=min(5, top_k))
+            reranker = get_local_reranker(pipeline)
+            if pipeline.settings.enable_reranker:
+                retrieved = reranker.rerank(question, retrieved, top_k=min(5, top_k))
         except Exception:
             pass
-    return retrieved
+    return retrieved[:top_k]
 
 
 def _load_student_context(question: str, current_user: dict[str, Any], enabled: bool) -> str:
@@ -276,7 +279,7 @@ def resolve_chat_execution_plan(
     elif route == "web_first":
         web_results = pipeline.web_search(question, max_results=min(5, top_k))
         if web_results:
-            retrieved = web_results
+            retrieved = web_results + retrieved
             used_web_search = True
         else:
             retrieved = list(internal_retrieved)
@@ -284,7 +287,8 @@ def resolve_chat_execution_plan(
         if pipeline.should_use_web_search(internal_retrieved):
             web_results = pipeline.web_search(question, max_results=min(5, top_k))
             if web_results:
-                retrieved = web_results
+                retrieved.extend(web_results)
+                retrieved.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
                 used_web_search = True
 
     student_ctx = _load_student_context(
@@ -535,27 +539,34 @@ def get_pipeline(settings: Settings) -> UTCRAGPipeline:
     return getattr(get_pipeline, "_instance")
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(AUTH_SCHEME),
 ) -> dict[str, Any]:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Chưa đăng nhập.")
 
     token = credentials.credentials
-    with DATA_LOCK:
-        session_data = SESSIONS.get(token)
-        if session_data is None or session_data.expires_at < now_epoch():
-            SESSIONS.pop(token, None)
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Phiên đăng nhập đã hết hạn.")
+    
+    def _check_session():
+        with DATA_LOCK:
+            session_data = SESSIONS.get(token)
+            if session_data is None or session_data.expires_at < now_epoch():
+                SESSIONS.pop(token, None)
+                return None
+            return session_data
 
-    users = list_users()
+    session_data = await asyncio.to_thread(_check_session)
+    if session_data is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Phiên đăng nhập đã hết hạn.")
+
+    users = await asyncio.to_thread(list_users)
     user = next((item for item in users if item["id"] == session_data.user_id), None)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Tài khoản không tồn tại.")
     return user
 
 
-def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+async def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập.")
     return current_user
@@ -608,7 +619,7 @@ def on_startup() -> None:
 
 
 @app.get("/api/health")
-def api_health() -> dict[str, Any]:
+async def api_health() -> dict[str, Any]:
     return {
         "status": "ok",
         "service": "utc-assistant-api",
@@ -617,88 +628,99 @@ def api_health() -> dict[str, Any]:
 
 
 @app.post("/api/auth/register")
-def api_register(payload: RegisterRequest) -> dict[str, Any]:
-    ensure_runtime_files()
-    with DATA_LOCK:
-        users = list_users()
-        identifier = payload.identifier.strip()
-        email = payload.email.strip().lower()
-        if any(user["identifier"].lower() == identifier.lower() for user in users):
-            raise HTTPException(status_code=400, detail="Mã định danh đã tồn tại.")
-        if any(user["email"].lower() == email for user in users):
-            raise HTTPException(status_code=400, detail="Email đã được sử dụng.")
+async def api_register(payload: RegisterRequest) -> dict[str, Any]:
+    def _do_register():
+        ensure_runtime_files()
+        with DATA_LOCK:
+            users = list_users()
+            identifier = payload.identifier.strip()
+            email = payload.email.strip().lower()
+            if any(user["identifier"].lower() == identifier.lower() for user in users):
+                raise HTTPException(status_code=400, detail="Mã định danh đã tồn tại.")
+            if any(user["email"].lower() == email for user in users):
+                raise HTTPException(status_code=400, detail="Email đã được sử dụng.")
 
-        user = {
-            "id": f"u_{uuid4().hex[:10]}",
-            "name": payload.full_name.strip(),
-            "identifier": identifier,
-            "email": email,
-            "faculty": "Chưa cập nhật",
-            "role": payload.role,
-            "status": "Đang hoạt động",
-            "created_at": format_datetime(),
-            "password_hash": hash_password(payload.password),
-        }
-        users.append(user)
-        save_users(users)
-
-    append_activity("Đăng ký tài khoản", user["name"], "Đã tạo")
-    return {"message": "Đăng ký thành công.", "user": user_public(user)}
+            user = {
+                "id": f"u_{uuid4().hex[:10]}",
+                "name": payload.full_name.strip(),
+                "identifier": identifier,
+                "email": email,
+                "faculty": "Chưa cập nhật",
+                "role": payload.role,
+                "status": "Đang hoạt động",
+                "created_at": format_datetime(),
+                "password_hash": hash_password(payload.password),
+            }
+            users.append(user)
+            save_users(users)
+        append_activity("Đăng ký tài khoản", user["name"], "Đã tạo")
+        return {"message": "Đăng ký thành công.", "user": user_public(user)}
+    
+    return await asyncio.to_thread(_do_register)
 
 
 @app.post("/api/auth/login")
-def api_login(payload: LoginRequest) -> dict[str, Any]:
-    ensure_runtime_files()
-    if not login_limiter.check("login"):
-        raise HTTPException(status_code=429, detail="Quá nhiều yêu cầu. Vui lòng thử lại sau.")
-    identifier = payload.identifier.strip().lower()
-    users = list_users()
-    user = next(
-        (
-            item
-            for item in users
-            if item["identifier"].lower() == identifier or item["email"].lower() == identifier
-        ),
-        None,
-    )
-    if user is None or not verify_password(payload.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=401, detail="Thông tin đăng nhập không hợp lệ.")
-    if user.get("status") == "Tạm khóa":
-        raise HTTPException(status_code=403, detail="Tài khoản đang bị tạm khóa.")
+async def api_login(payload: LoginRequest) -> dict[str, Any]:
+    def _do_login():
+        ensure_runtime_files()
+        if not login_limiter.check("login"):
+            raise HTTPException(status_code=429, detail="Quá nhiều yêu cầu. Vui lòng thử lại sau.")
+        identifier = payload.identifier.strip().lower()
+        users = list_users()
+        user = next(
+            (
+                item
+                for item in users
+                if item["identifier"].lower() == identifier or item["email"].lower() == identifier
+            ),
+            None,
+        )
+        if user is None or not verify_password(payload.password, user.get("password_hash", "")):
+            raise HTTPException(status_code=401, detail="Thông tin đăng nhập không hợp lệ.")
+        if user.get("status") == "Tạm khóa":
+            raise HTTPException(status_code=403, detail="Tài khoản đang bị tạm khóa.")
 
-    token = uuid4().hex
-    with DATA_LOCK:
-        SESSIONS[token] = SessionData(user_id=user["id"], expires_at=now_epoch() + SESSION_TTL_SECONDS)
+        token = uuid4().hex
+        with DATA_LOCK:
+            SESSIONS[token] = SessionData(user_id=user["id"], expires_at=now_epoch() + SESSION_TTL_SECONDS)
 
-    append_activity("Đăng nhập", user["name"], "Thành công")
-    return {"token": token, "user": user_public(user)}
+        append_activity("Đăng nhập", user["name"], "Thành công")
+        return {"token": token, "user": user_public(user)}
+
+    return await asyncio.to_thread(_do_login)
 
 
 @app.get("/api/auth/me")
-def api_me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+async def api_me(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     return {"user": user_public(current_user)}
 
 
 @app.post("/api/auth/logout")
-def api_logout(credentials: HTTPAuthorizationCredentials | None = Depends(AUTH_SCHEME)) -> dict[str, str]:
-    if credentials is not None:
-        with DATA_LOCK:
-            SESSIONS.pop(credentials.credentials, None)
+async def api_logout(credentials: HTTPAuthorizationCredentials | None = Depends(AUTH_SCHEME)) -> dict[str, str]:
+    def _do_logout():
+        if credentials is not None:
+            with DATA_LOCK:
+                SESSIONS.pop(credentials.credentials, None)
+    
+    await asyncio.to_thread(_do_logout)
     return {"message": "Đã đăng xuất."}
 
 
 @app.post("/api/auth/forgot-password")
-def api_forgot_password(payload: ForgotPasswordRequest) -> dict[str, str]:
-    users = list_users()
-    email = payload.email.strip().lower()
-    user = next((item for item in users if item["email"].lower() == email), None)
-    if user is not None:
-        append_activity("Yêu cầu quên mật khẩu", user["name"], "Đã tiếp nhận")
+async def api_forgot_password(payload: ForgotPasswordRequest) -> dict[str, str]:
+    def _do_forgot_password():
+        users = list_users()
+        email = payload.email.strip().lower()
+        user = next((item for item in users if item["email"].lower() == email), None)
+        if user is not None:
+            append_activity("Yêu cầu quên mật khẩu", user["name"], "Đã tiếp nhận")
+            
+    await asyncio.to_thread(_do_forgot_password)
     return {"message": "Nếu email tồn tại, hệ thống sẽ gửi hướng dẫn đặt lại mật khẩu."}
 
 
 @app.post("/api/auth/change-password")
-def api_change_password(
+async def api_change_password(
     payload: ChangePasswordRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, str]:
@@ -707,67 +729,78 @@ def api_change_password(
     if payload.current_password == payload.new_password:
         raise HTTPException(status_code=400, detail="Mật khẩu mới phải khác mật khẩu hiện tại.")
 
-    with DATA_LOCK:
-        users = list_users()
-        for user in users:
-            if user["id"] == current_user["id"]:
-                user["password_hash"] = hash_password(payload.new_password)
-                break
-        save_users(users)
-    append_activity("Đổi mật khẩu", current_user["name"], "Thành công")
+    def _do_change():
+        with DATA_LOCK:
+            users = list_users()
+            for user in users:
+                if user["id"] == current_user["id"]:
+                    user["password_hash"] = hash_password(payload.new_password)
+                    break
+            save_users(users)
+        append_activity("Đổi mật khẩu", current_user["name"], "Thành công")
+
+    await asyncio.to_thread(_do_change)
     return {"message": "Đổi mật khẩu thành công."}
 
 
 @app.get("/api/news")
-def api_news() -> dict[str, Any]:
-    ensure_runtime_files()
-    return {"items": read_json(NEWS_FILE, seed_news())}
+async def api_news() -> dict[str, Any]:
+    def _do_get_news():
+        ensure_runtime_files()
+        return {"items": read_json(NEWS_FILE, seed_news())}
+        
+    return await asyncio.to_thread(_do_get_news)
 
 
 @app.get("/api/documents")
-def api_documents(
+async def api_documents(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
-    records = list_documents(settings.raw_dir)
-    items = []
-    for record in records:
-        extension = Path(record.filename).suffix.lower().replace(".", "").upper() or "TXT"
-        items.append(
-            {
-                "id": record.filename,
-                "name": record.title,
-                "type": extension,
-                "source": parse_source_from_text(record.path),
-                "status": "Đã sẵn sàng" if record.char_count >= 50 else "Lỗi xử lý",
-                "updated_at": record.modified_at,
-                "owner": "Hệ thống",
-                "filename": record.filename,
-                "char_count": record.char_count,
-                "chunk_count": record.chunk_count,
-            }
-        )
-    return paginate(items, page, page_size)
+    def _do_get_documents():
+        records = list_documents(settings.raw_dir)
+        items = []
+        for record in records:
+            extension = Path(record.filename).suffix.lower().replace(".", "").upper() or "TXT"
+            items.append(
+                {
+                    "id": record.filename,
+                    "name": record.title,
+                    "type": extension,
+                    "source": parse_source_from_text(record.path),
+                    "status": "Đã sẵn sàng" if record.char_count >= 50 else "Lỗi xử lý",
+                    "updated_at": record.modified_at,
+                    "owner": "Hệ thống",
+                    "filename": record.filename,
+                    "char_count": record.char_count,
+                    "chunk_count": record.chunk_count,
+                }
+            )
+        return paginate(items, page, page_size)
+    return await asyncio.to_thread(_do_get_documents)
 
 
 @app.post("/api/documents/import")
-def api_documents_import(
+async def api_documents_import(
     payload: DocumentImportRequest,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, str]:
-    output = save_imported_text(
-        raw_dir=settings.raw_dir,
-        title=payload.title.strip(),
-        body=payload.content.strip(),
-        source_name=payload.source.strip(),
-    )
-    append_activity("Import tài liệu", current_user["name"], output.name)
-    return {"message": "Import tài liệu thành công.", "filename": output.name}
+    def _do_import():
+        output = save_imported_text(
+            raw_dir=settings.raw_dir,
+            title=payload.title.strip(),
+            body=payload.content.strip(),
+            source_name=payload.source.strip(),
+        )
+        append_activity("Import tài liệu", current_user["name"], output.name)
+        return {"message": "Import tài liệu thành công.", "filename": output.name}
+        
+    return await asyncio.to_thread(_do_import)
 
 
 @app.get("/api/users")
-def api_users(
+async def api_users(
     q: str = "",
     role: str = "all",
     status_filter: str = "all",
@@ -776,72 +809,88 @@ def api_users(
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     del current_user
-    users = [user_public(user) for user in list_users()]
-    if role != "all":
-        users = [user for user in users if user["role"] == role]
-    if status_filter != "all":
-        users = [user for user in users if user["status"] == status_filter]
-    query = q.strip().lower()
-    if query:
-        users = [
-            user
-            for user in users
-            if query in user["name"].lower()
-            or query in user["identifier"].lower()
-            or query in user["email"].lower()
-        ]
-    return paginate(users, page, page_size)
+    def _do_get_users():
+        users = [user_public(user) for user in list_users()]
+        if role != "all":
+            users = [user for user in users if user["role"] == role]
+        if status_filter != "all":
+            users = [user for user in users if user["status"] == status_filter]
+        query = q.strip().lower()
+        if query:
+            users = [
+                user
+                for user in users
+                if query in user["name"].lower()
+                or query in user["identifier"].lower()
+                or query in user["email"].lower()
+            ]
+        return paginate(users, page, page_size)
+    
+    return await asyncio.to_thread(_do_get_users)
 
 
 @app.post("/api/users/{user_id}/toggle-lock")
-def api_users_toggle_lock(
+async def api_users_toggle_lock(
     user_id: str,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, str]:
-    with DATA_LOCK:
-        users = list_users()
-        user = next((item for item in users if item["id"] == user_id), None)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
-        user["status"] = "Tạm khóa" if user["status"] == "Đang hoạt động" else "Đang hoạt động"
-        save_users(users)
-    append_activity("Đổi trạng thái tài khoản", current_user["name"], user["status"])
-    return {"message": "Đã cập nhật trạng thái tài khoản.", "status": user["status"]}
+    def _do_toggle():
+        with DATA_LOCK:
+            users = list_users()
+            user = next((item for item in users if item["id"] == user_id), None)
+            if user is None:
+                raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
+            user["status"] = "Tạm khóa" if user["status"] == "Đang hoạt động" else "Đang hoạt động"
+            save_users(users)
+        append_activity("Đổi trạng thái tài khoản", current_user["name"], user["status"])
+        return {"message": "Đã cập nhật trạng thái tài khoản.", "status": user["status"]}
+
+    return await asyncio.to_thread(_do_toggle)
 
 
 @app.post("/api/users/{user_id}/reset-password")
-def api_users_reset_password(
+async def api_users_reset_password(
     user_id: str,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, str]:
-    with DATA_LOCK:
-        users = list_users()
-        user = next((item for item in users if item["id"] == user_id), None)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
-        user["password_hash"] = hash_password("12345678")
-        save_users(users)
-    append_activity("Đặt lại mật khẩu", current_user["name"], user["name"])
-    return {"message": "Đặt lại mật khẩu thành công. Mật khẩu mặc định: 12345678"}
+    def _do_reset():
+        with DATA_LOCK:
+            users = list_users()
+            user = next((item for item in users if item["id"] == user_id), None)
+            if user is None:
+                raise HTTPException(status_code=404, detail="Không tìm thấy người dùng.")
+            user["password_hash"] = hash_password("12345678")
+            save_users(users)
+        append_activity("Đặt lại mật khẩu", current_user["name"], user["name"])
+        return {"message": "Đặt lại mật khẩu thành công. Mật khẩu mặc định: 12345678"}
+
+    return await asyncio.to_thread(_do_reset)
 
 
 @app.post("/api/chat")
-def api_chat(
+async def api_chat(
     payload: ChatRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    ensure_runtime_files()
-    if not chat_limiter.check(current_user["id"]):
-        raise HTTPException(status_code=429, detail="Quá nhiều câu hỏi. Vui lòng chờ một lát.")
+    def _check_rate_limit():
+        ensure_runtime_files()
+        if not chat_limiter.check(current_user["id"]):
+            raise HTTPException(status_code=429, detail="Quá nhiều câu hỏi. Vui lòng chờ một lát.")
+            
+    await asyncio.to_thread(_check_rate_limit)
+
     question = payload.question.strip()
     started_at = now_epoch()
-    pipeline = get_pipeline(settings)
-    execution = resolve_chat_execution_plan(
+    pipeline = await asyncio.to_thread(get_pipeline, settings)
+    
+    execution = await asyncio.to_thread(
+        resolve_chat_execution_plan,
         pipeline,
-        question=question,
-        current_user=current_user,
-        top_k=payload.top_k,
+        question,
+        current_user,
+        payload.top_k,
     )
+    
     route = execution["route_decision"]["route"]
     sources = execution["retrieved"]
     if route == "direct_fallback" or not sources:
@@ -855,39 +904,49 @@ def api_chat(
             retrieved=sources,
             student_ctx=execution["student_ctx"],
         )
-        response = llm.session.post(
-            f"{llm.base_url}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {llm.api_key}"},
-            json={
-                "model": llm.model,
-                "messages": llm._prepare_messages(messages),
-                "temperature": 0.2,
-                "max_tokens": settings.llm_max_tokens,
-            },
-            timeout=llm.timeout,
-        )
-        response.raise_for_status()
-        thinking, answer = llm.extract_answer_with_thinking(response.json())
+        
+        def _call_llm():
+            response = llm.session.post(
+                f"{llm.base_url}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {llm.api_key}"},
+                json={
+                    "model": llm.model,
+                    "messages": llm._prepare_messages(messages),
+                    "temperature": 0.2,
+                    "max_tokens": settings.llm_max_tokens,
+                },
+                timeout=llm.timeout,
+            )
+            response.raise_for_status()
+            return llm.extract_answer_with_thinking(response.json())
+            
+        thinking, answer = await asyncio.to_thread(_call_llm)
+        
     latency_sec = round(now_epoch() - started_at, 2)
+    answer += f"\n\n*(Thời gian phản hồi: {latency_sec}s)*"
     source_items = build_source_items(sources)
 
     topic = intent_to_topic(execution["intent_result"]["intent"])
-    log_question_event(
-        question=question,
-        current_user=current_user,
-        answer=answer,
-        thinking=thinking,
-        latency_sec=latency_sec,
-        topic=topic,
-        intent=execution["intent_result"]["intent"],
-        intent_confidence=execution["intent_result"]["confidence"],
-        route=execution["route_decision"]["route"],
-        retrieval_tier=execution["route_decision"]["retrieval_tier"],
-        used_student_context=execution["route_decision"]["used_student_context"],
-        used_web_search=execution["route_decision"]["use_web_search"],
-        top1_score=execution["retrieval_probe"]["top1_score"],
-        result_count=execution["retrieval_probe"]["result_count"],
-    )
+    
+    def _log_event():
+        log_question_event(
+            question=question,
+            current_user=current_user,
+            answer=answer,
+            thinking=thinking,
+            latency_sec=latency_sec,
+            topic=topic,
+            intent=execution["intent_result"]["intent"],
+            intent_confidence=execution["intent_result"]["confidence"],
+            route=execution["route_decision"]["route"],
+            retrieval_tier=execution["route_decision"]["retrieval_tier"],
+            used_student_context=execution["route_decision"]["used_student_context"],
+            used_web_search=execution["route_decision"]["use_web_search"],
+            top1_score=execution["retrieval_probe"]["top1_score"],
+            result_count=execution["retrieval_probe"]["result_count"],
+        )
+        
+    await asyncio.to_thread(_log_event)
 
     return {
         "thinking": thinking,
@@ -903,178 +962,190 @@ def api_chat(
 
 
 @app.get("/api/questions")
-def api_questions(
+async def api_questions(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     del current_user
-    items = read_json(QUESTIONS_FILE, [])
-    items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
-    return paginate(items, page, page_size)
+    def _do_get():
+        items = read_json(QUESTIONS_FILE, [])
+        items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
+        return paginate(items, page, page_size)
+    return await asyncio.to_thread(_do_get)
 
 
 @app.post("/api/feedback")
-def api_feedback(
+async def api_feedback(
     payload: FeedbackRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, str]:
-    feedback_item = {
-        "id": f"fb-{uuid4().hex[:10]}",
-        "topic": payload.subject.strip(),
-        "student": current_user["identifier"],
-        "satisfaction": payload.satisfaction.strip(),
-        "content": payload.content.strip(),
-        "email": payload.email.strip(),
-        "status": "Chờ phản hồi",
-        "time": format_datetime(),
-        "epoch": now_epoch(),
-    }
-    with DATA_LOCK:
-        items = read_json(FEEDBACK_FILE, [])
-        items.append(feedback_item)
-        items = items[-500:]
-        write_json(FEEDBACK_FILE, items)
-    append_activity("Gửi feedback", current_user["name"], feedback_item["status"])
-    return {"message": "Đã tiếp nhận feedback.", "id": feedback_item["id"]}
+    def _do_post():
+        feedback_item = {
+            "id": f"fb-{uuid4().hex[:10]}",
+            "topic": payload.subject.strip(),
+            "student": current_user["identifier"],
+            "satisfaction": payload.satisfaction.strip(),
+            "content": payload.content.strip(),
+            "email": payload.email.strip(),
+            "status": "Chờ phản hồi",
+            "time": format_datetime(),
+            "epoch": now_epoch(),
+        }
+        with DATA_LOCK:
+            items = read_json(FEEDBACK_FILE, [])
+            items.append(feedback_item)
+            items = items[-500:]
+            write_json(FEEDBACK_FILE, items)
+        append_activity("Gửi feedback", current_user["name"], feedback_item["status"])
+        return {"message": "Đã tiếp nhận feedback.", "id": feedback_item["id"]}
+    return await asyncio.to_thread(_do_post)
 
 
 @app.get("/api/feedback")
-def api_feedback_list(
+async def api_feedback_list(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     current_user: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     del current_user
-    items = read_json(FEEDBACK_FILE, [])
-    items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
-    return paginate(items, page, page_size)
+    def _do_get():
+        items = read_json(FEEDBACK_FILE, [])
+        items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
+        return paginate(items, page, page_size)
+    return await asyncio.to_thread(_do_get)
 
 
 @app.post("/api/bugs")
-def api_bugs(
+async def api_bugs(
     payload: BugRequest,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, str]:
-    bug = {
-        "id": f"bug-{uuid4().hex[:10]}",
-        "title": payload.description.strip().splitlines()[0][:140],
-        "type": payload.bug_type.strip(),
-        "severity": payload.severity.strip(),
-        "description": payload.description.strip(),
-        "status": "Đã tiếp nhận",
-        "assignee": "Chưa phân công",
-        "reporter": current_user["identifier"],
-        "time": format_datetime(),
-        "epoch": now_epoch(),
-        "screenshot_note": payload.screenshot_note.strip(),
-    }
-    with DATA_LOCK:
-        items = read_json(BUGS_FILE, [])
-        items.append(bug)
-        items = items[-500:]
-        write_json(BUGS_FILE, items)
-    append_activity("Gửi báo cáo lỗi", current_user["name"], bug["status"])
-    return {"message": "Đã tiếp nhận báo cáo lỗi.", "id": bug["id"]}
+    def _do_post():
+        bug = {
+            "id": f"bug-{uuid4().hex[:10]}",
+            "title": payload.description.strip().splitlines()[0][:140],
+            "type": payload.bug_type.strip(),
+            "severity": payload.severity.strip(),
+            "description": payload.description.strip(),
+            "status": "Đã tiếp nhận",
+            "assignee": "Chưa phân công",
+            "reporter": current_user["identifier"],
+            "time": format_datetime(),
+            "epoch": now_epoch(),
+            "screenshot_note": payload.screenshot_note.strip(),
+        }
+        with DATA_LOCK:
+            items = read_json(BUGS_FILE, [])
+            items.append(bug)
+            items = items[-500:]
+            write_json(BUGS_FILE, items)
+        append_activity("Gửi báo cáo lỗi", current_user["name"], bug["status"])
+        return {"message": "Đã tiếp nhận báo cáo lỗi.", "id": bug["id"]}
+    return await asyncio.to_thread(_do_post)
 
 
 @app.get("/api/bugs")
-def api_bug_list(
+async def api_bug_list(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     current_user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    items = read_json(BUGS_FILE, [])
-    if current_user["role"] != "admin":
-        items = [item for item in items if item.get("reporter") == current_user["identifier"]]
-    items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
-    return paginate(items, page, page_size)
+    def _do_get():
+        items = read_json(BUGS_FILE, [])
+        if current_user["role"] != "admin":
+            items = [item for item in items if item.get("reporter") == current_user["identifier"]]
+        items.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
+        return paginate(items, page, page_size)
+    return await asyncio.to_thread(_do_get)
 
 
 @app.get("/api/dashboard")
-def api_dashboard(current_user: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
+async def api_dashboard(current_user: dict[str, Any] = Depends(require_admin)) -> dict[str, Any]:
     del current_user
-    users = list_users()
-    documents = list_documents(settings.raw_dir)
-    feedback_items = read_json(FEEDBACK_FILE, [])
-    bugs = read_json(BUGS_FILE, [])
-    questions = read_json(QUESTIONS_FILE, [])
-    activities = read_json(ACTIVITY_FILE, [])
+    def _do_get():
+        users = list_users()
+        documents = list_documents(settings.raw_dir)
+        feedback_items = read_json(FEEDBACK_FILE, [])
+        bugs = read_json(BUGS_FILE, [])
+        questions = read_json(QUESTIONS_FILE, [])
+        activities = read_json(ACTIVITY_FILE, [])
 
-    total_questions = len(questions)
-    success_count = sum(1 for item in questions if item.get("success"))
-    success_rate = round((success_count / total_questions) * 100, 1) if total_questions else 0.0
-    avg_latency = (
-        round(sum(float(item.get("latency_sec", 0.0)) for item in questions) / total_questions, 2)
-        if total_questions
-        else 0.0
-    )
+        total_questions = len(questions)
+        success_count = sum(1 for item in questions if item.get("success"))
+        success_rate = round((success_count / total_questions) * 100, 1) if total_questions else 0.0
+        avg_latency = (
+            round(sum(float(item.get("latency_sec", 0.0)) for item in questions) / total_questions, 2)
+            if total_questions
+            else 0.0
+        )
 
-    today = time.localtime()
-    access_by_day = []
-    for offset in range(6, -1, -1):
-        day_epoch = time.mktime(
-            (
-                today.tm_year,
-                today.tm_mon,
-                today.tm_mday - offset,
-                0,
-                0,
-                0,
-                0,
-                0,
-                -1,
+        today = time.localtime()
+        access_by_day = []
+        for offset in range(6, -1, -1):
+            day_epoch = time.mktime(
+                (
+                    today.tm_year,
+                    today.tm_mon,
+                    today.tm_mday - offset,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    -1,
+                )
             )
-        )
-        key = today_key(day_epoch)
-        count = sum(1 for item in questions if today_key(float(item.get("epoch", 0.0))) == key)
-        access_by_day.append(
+            key = today_key(day_epoch)
+            count = sum(1 for item in questions if today_key(float(item.get("epoch", 0.0))) == key)
+            access_by_day.append(
+                {
+                    "day": time.strftime("%a", time.localtime(day_epoch)).replace("Mon", "T2").replace("Tue", "T3").replace("Wed", "T4").replace("Thu", "T5").replace("Fri", "T6").replace("Sat", "T7").replace("Sun", "CN"),
+                    "value": count,
+                }
+            )
+
+        topic_counter: dict[str, int] = {}
+        for item in questions:
+            topic = str(item.get("topic", "Khác"))
+            topic_counter[topic] = topic_counter.get(topic, 0) + 1
+        total_topic = sum(topic_counter.values()) or 1
+        topic_percent = [
+            {"label": topic, "value": round(count * 100 / total_topic)}
+            for topic, count in sorted(topic_counter.items(), key=lambda row: row[1], reverse=True)
+        ][:5]
+        if not topic_percent:
+            topic_percent = [{"label": "Khác", "value": 0}]
+
+        kpis = [
+            {"label": "Tổng lượt truy cập", "value": str(len(activities) + total_questions), "delta": f"+{min(total_questions, 99)}"},
+            {"label": "Số lượng câu hỏi", "value": str(total_questions), "delta": f"+{total_questions}"},
             {
-                "day": time.strftime("%a", time.localtime(day_epoch)).replace("Mon", "T2").replace("Tue", "T3").replace("Wed", "T4").replace("Thu", "T5").replace("Fri", "T6").replace("Sat", "T7").replace("Sun", "CN"),
-                "value": count,
-            }
-        )
+                "label": "Người dùng đang hoạt động",
+                "value": str(sum(1 for user in users if user.get("status") == "Đang hoạt động")),
+                "delta": f"+{sum(1 for user in users if user.get('role') == 'student')}",
+            },
+            {"label": "Tài liệu đã xử lý", "value": str(len(documents)), "delta": f"+{len(documents)}"},
+            {"label": "Feedback mới", "value": str(len(feedback_items)), "delta": f"+{len(feedback_items)}"},
+            {
+                "label": "Báo cáo lỗi chờ xử lý",
+                "value": str(sum(1 for bug in bugs if bug.get("status") != "Đã hoàn tất")),
+                "delta": f"-{sum(1 for bug in bugs if bug.get('status') == 'Đã hoàn tất')}",
+            },
+        ]
 
-    topic_counter: dict[str, int] = {}
-    for item in questions:
-        topic = str(item.get("topic", "Khác"))
-        topic_counter[topic] = topic_counter.get(topic, 0) + 1
-    total_topic = sum(topic_counter.values()) or 1
-    topic_percent = [
-        {"label": topic, "value": round(count * 100 / total_topic)}
-        for topic, count in sorted(topic_counter.items(), key=lambda row: row[1], reverse=True)
-    ][:5]
-    if not topic_percent:
-        topic_percent = [{"label": "Khác", "value": 0}]
+        activities.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
+        recent_activities = activities[:10]
 
-    kpis = [
-        {"label": "Tổng lượt truy cập", "value": str(len(activities) + total_questions), "delta": f"+{min(total_questions, 99)}"},
-        {"label": "Số lượng câu hỏi", "value": str(total_questions), "delta": f"+{total_questions}"},
-        {
-            "label": "Người dùng đang hoạt động",
-            "value": str(sum(1 for user in users if user.get("status") == "Đang hoạt động")),
-            "delta": f"+{sum(1 for user in users if user.get('role') == 'student')}",
-        },
-        {"label": "Tài liệu đã xử lý", "value": str(len(documents)), "delta": f"+{len(documents)}"},
-        {"label": "Feedback mới", "value": str(len(feedback_items)), "delta": f"+{len(feedback_items)}"},
-        {
-            "label": "Báo cáo lỗi chờ xử lý",
-            "value": str(sum(1 for bug in bugs if bug.get("status") != "Đã hoàn tất")),
-            "delta": f"-{sum(1 for bug in bugs if bug.get('status') == 'Đã hoàn tất')}",
-        },
-    ]
-
-    activities.sort(key=lambda item: float(item.get("epoch", 0.0)), reverse=True)
-    recent_activities = activities[:10]
-
-    return {
-        "kpis": kpis,
-        "access_by_day": access_by_day,
-        "question_topics": topic_percent,
-        "success_rate": success_rate,
-        "avg_latency_sec": avg_latency,
-        "recent_activities": recent_activities,
-    }
+        return {
+            "kpis": kpis,
+            "access_by_day": access_by_day,
+            "question_topics": topic_percent,
+            "success_rate": success_rate,
+            "avg_latency_sec": avg_latency,
+            "recent_activities": recent_activities,
+        }
+    return await asyncio.to_thread(_do_get)
 
 
 _SUGGESTIONS_CACHE: list[str] = []
@@ -1145,8 +1216,9 @@ def _load_suggestions() -> list[str]:
 
 
 @app.get("/api/suggestions")
-def api_suggestions() -> dict[str, Any]:
-    return {"items": _load_suggestions()}
+async def api_suggestions() -> dict[str, Any]:
+    items = await asyncio.to_thread(_load_suggestions)
+    return {"items": items}
 
 # Import stream endpoint
 import src.chat_stream  # noqa: F401 - registers /api/chat/stream

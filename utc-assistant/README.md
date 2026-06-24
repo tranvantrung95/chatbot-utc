@@ -54,7 +54,7 @@ Sửa `.env` nếu cần:
 LLM_BASE_URL=http://localhost:8000/v1
 EMBED_BASE_URL=http://localhost:8000/v1
 EMBED_MODEL=bge-m3
-LLM_MODEL=qwen35-opus
+LLM_MODEL=qwen36-35b-moe
 TOP_K=5
 CHUNK_SIZE=500
 CHUNK_OVERLAP=100
@@ -68,6 +68,15 @@ python -m src.rag_pipeline index
 python -m src.rag_pipeline ask "Điều kiện xét tốt nghiệp là gì?"
 python -m src.rag_pipeline retrieve "Điều kiện xét tốt nghiệp"
 ```
+
+### Teacher evaluation loop
+
+Offline evaluation using the configured LLM provider to act as a judge:
+
+```bash
+python -m src.eval_runner --questions data/autotest/questions.json --limit 20 --output data/runtime/teacher_eval_report.json
+```
+
 
 ## Cấu trúc
 

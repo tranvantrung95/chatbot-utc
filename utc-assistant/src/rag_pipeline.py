@@ -120,7 +120,7 @@ class Settings:
     llm_base_url: str = "http://127.0.0.1:8103"
     api_key: str = "EMPTY"
     embed_model: str = "bge-m3"
-    llm_model: str = "qwen35-opus"
+    llm_model: str = "qwen36-35b-moe"
     chunk_size: int = DEFAULT_CHUNK_SIZE
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
     top_k: int = DEFAULT_TOP_K
@@ -128,8 +128,9 @@ class Settings:
     vector_dir: Path = VECTOR_DIR
     raw_dir: Path = RAW_DIR
     enable_web_search: bool = True
-    web_search_threshold: float = 0.35
+    web_search_threshold: float = 0.55
     web_search_priority_domains: Tuple[str, ...] = ("utc.edu.vn",)
+    enable_reranker: bool = True
 
 
 def _parse_env_file(env_path: Path) -> Dict[str, str]:
@@ -183,9 +184,9 @@ def load_settings(env_path: Optional[Path] = None) -> Settings:
 
     enable_web_search = values.get("ENABLE_WEB_SEARCH", "True").strip().lower() == "true"
     try:
-        web_search_threshold = float(values.get("WEB_SEARCH_THRESHOLD", "0.35").strip())
+        web_search_threshold = float(values.get("WEB_SEARCH_THRESHOLD", "0.55").strip())
     except ValueError:
-        web_search_threshold = 0.35
+        web_search_threshold = 0.55
     raw_domains = values.get("WEB_SEARCH_PRIORITY_DOMAINS", "utc.edu.vn")
     web_search_priority_domains = tuple(
         domain.strip().lower()
@@ -282,7 +283,7 @@ class OllamaLLM:
     def __init__(
         self,
         base_url: str = "http://127.0.0.1:8103",
-        model: str = "qwen35-opus",
+        model: str = "qwen36-35b-moe",
         api_key: str = "EMPTY",
         timeout: int = 180,
     ):
@@ -335,7 +336,11 @@ class OllamaLLM:
             if answer:
                 return (reasoning + "\n" + t_from_content).strip(), answer
             # Content might be the answer, reasoning is the thinking
-            return reasoning, content if content else reasoning
+            if content:
+                return reasoning, content
+            # If content is empty, maybe the answer is inside reasoning after a marker
+            marked = cls._extract_after_marker(reasoning)
+            return reasoning, marked or reasoning
 
         # No reasoning - try extracting thinking tags from content
         if content:
@@ -468,9 +473,9 @@ class UTCRAGPipeline:
 
     SYSTEM_PROMPT = (
         "Bạn là Trợ lý ảo của Trường Đại học Giao thông Vận tải (UTC).\n"
-        "QUY ĐỊNH BẮT BUỘC VỀ NGÔN NGỮ SUY NGHĨ (THINKING LANGUAGE):\n"
-        "• Bạn PHẢI thực hiện toàn bộ quá trình suy nghĩ, lập luận (reasoning/thinking process) bằng TIẾNG VIỆT.\n"
-        "• Tuyệt đối không suy nghĩ bằng tiếng Anh hay bất kỳ ngôn ngữ nào khác trong thẻ <think> hay phần lập luận nội bộ.\n"
+        "QUY ĐỊNH BẮT BUỘC VỀ NGÔN NGỮ SUY NGHĨ (THINKING PROCESS):\n"
+        "• TOÀN BỘ quá trình suy nghĩ, lập luận trong thẻ <think> PHẢI ĐƯỢC VIẾT BẰNG TIẾNG VIỆT 100%.\n"
+        "• KHÔNG sử dụng các từ tiếng Anh như 'User Question', 'Context', 'Task', 'Step 1'. Hãy bắt đầu suy nghĩ bằng 'Bước 1: Phân tích...'.\n"
         "• Trả lời sinh viên bằng tiếng Việt thân thiện, chuyên nghiệp.\n"
         "\n"
         "QUY TẮC CỐT LÕI:\n"
@@ -1207,11 +1212,23 @@ class UTCRAGPipeline:
             return False
         if not retrieved:
             return True
-        return float(retrieved[0].get("score", 0.0)) < self.settings.web_search_threshold
+        first = retrieved[0]
+        # Prefer _llm_score (from LocalCrossEncoder) if available
+        if "_llm_score" in first:
+            best_score = float(first["_llm_score"])
+        elif "dense_score" in first:
+            best_score = float(first["dense_score"])
+        else:
+            best_score = float(first.get("score", 0.0))
+        return best_score < self.settings.web_search_threshold
 
     def web_search(self, query: str, max_results: int = 3) -> List[Dict[str, Any]]:
         """Public wrapper so callers can trigger the same web fallback consistently."""
-        return self._search_web_fallback(query, max_results=max_results)
+        try:
+            return self._search_web_fallback(query, max_results=max_results)
+        except Exception as e:
+            print(f"Web search failed: {e}")
+            return []
 
     def retrieve(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         query = query.strip()
@@ -1226,21 +1243,12 @@ class UTCRAGPipeline:
         if self.collection is None:
             self.init_vector_db()
 
-        embedder = self.load_embedder()
         collection_count = self.collection.count()
         if collection_count == 0:
             return []
 
-        # === PREPROCESSING: query expansion + semantic topic filter ===
-        expanded_query = self._expand_query(query)
+        # === PREPROCESSING: semantic topic filter ===
         topic_filter = self._detect_topic_semantic(query)
-
-        requested_top_k = top_k or self.settings.top_k
-        # Always fetch more candidates for fallback fusion
-        candidate_count = min(collection_count, max(requested_top_k * 3, 15))
-        query_embeddings = embedder.encode([expanded_query])
-
-        # Build ChromaDB where filter neu semantic detect duoc topic (similarity > 0.55)
         where_filter = None
         has_topic_filter = False
         if topic_filter:
@@ -1249,92 +1257,42 @@ class UTCRAGPipeline:
                 where_filter = {"phan_so": phan_so}
                 has_topic_filter = True
 
-        # Primary search: with topic filter if detected
-        results = self.collection.query(
-            query_embeddings=query_embeddings,
-            n_results=candidate_count,
-            include=["documents", "metadatas", "distances"],
-            where=where_filter,
+        requested_top_k = top_k or self.settings.top_k
+
+        # === HYBRID SEARCH ===
+        retrieved = self._hybrid_retrieve(
+            query=query,
+            top_k=requested_top_k * 2,  # Fetch more for reranking or fallback
+            expand=True,
+            where_filter=where_filter,
+            fallback_where=has_topic_filter,
         )
 
-        # Fallback: also search WITHOUT filter to catch cross-section matches
-        fallback_results = None
-        if has_topic_filter:
-            fallback_results = self.collection.query(
-                query_embeddings=query_embeddings,
-                n_results=max(3, requested_top_k),
-                include=["documents", "metadatas", "distances"],
-            )
-
-        # RRF-like or distance-based deduplication & fusion
-        seen = set()
-        retrieved = []
-
-        ids = results.get("ids") or [[]]
-        if ids and ids[0]:
-            for index in range(len(ids[0])):
-                metadata = results["metadatas"][0][index] or {}
-                content = results["documents"][0][index]
-                content_hash = hashlib.md5(content.encode()).hexdigest()
-                if content_hash in seen:
-                    continue
-                seen.add(content_hash)
-                distance = results["distances"][0][index]
-                retrieved.append(
-                    {
-                        "content": content,
-                        "source": metadata.get("source", ""),
-                        "title": metadata.get("title", ""),
-                        "heading": metadata.get("heading", ""),
-                        "breadcrumb": metadata.get("breadcrumb", ""),
-                        "type": metadata.get("type", ""),
-                        "pages": metadata.get("pages", ""),
-                        "score": 1.0 - distance,
-                    }
-                )
-
-        # Merge fallback results
-        if fallback_results:
-            fallback_ids = fallback_results.get("ids") or [[]]
-            if fallback_ids and fallback_ids[0]:
-                for index in range(len(fallback_ids[0])):
-                    content = fallback_results["documents"][0][index]
-                    content_hash = hashlib.md5(content.encode()).hexdigest()
-                    if content_hash in seen:
-                        continue
-                    seen.add(content_hash)
-                    metadata = fallback_results["metadatas"][0][index] or {}
-                    distance = fallback_results["distances"][0][index]
-                    retrieved.append(
-                        {
-                            "content": content,
-                            "source": metadata.get("source", ""),
-                            "title": metadata.get("title", ""),
-                            "heading": metadata.get("heading", ""),
-                            "breadcrumb": metadata.get("breadcrumb", ""),
-                            "type": metadata.get("type", ""),
-                            "pages": metadata.get("pages", ""),
-                            # penalize fallback score slightly to favor filtered matches
-                            "score": (1.0 - distance) * 0.9,
-                        }
-                    )
-
-        # Sort by score descending
-        retrieved.sort(key=lambda x: x["score"], reverse=True)
+        # Limit to top_k
+        retrieved = retrieved[:requested_top_k]
 
         # === WEB SEARCH FALLBACK ===
+        web_results = []
         if self.should_use_web_search(retrieved):
             print(
-                f"DEBUG: Max similarity score {retrieved[0]['score'] if retrieved else 0.0} "
+                f"DEBUG: Max similarity score {retrieved[0]['dense_score'] if retrieved else 0.0} "
                 f"is below threshold {self.settings.web_search_threshold}. "
                 f"Activating Web Search Fallback for: '{query}'"
             )
             web_results = self.web_search(query, max_results=3)
             if web_results:
-                retrieved = web_results
+                retrieved.extend(web_results)
+                retrieved.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
 
-        return retrieved[:requested_top_k]
+        if web_results:
+            final_retrieved = retrieved[:requested_top_k + len(web_results)]
+        else:
+            final_retrieved = retrieved[:requested_top_k]
 
+        # CACHE STORE
+        self._cache_store(query, final_retrieved)
+        
+        return final_retrieved
 
     # ---------------------------------------------------------------
     # Semantic cache: cache top-50 queries by cosine similarity
@@ -1405,7 +1363,7 @@ class UTCRAGPipeline:
         return "\n\n".join(parts)
 
     def _hybrid_retrieve(
-        self, query: str, top_k: int, expand: bool = True
+        self, query: str, top_k: int, expand: bool = True, where_filter: Optional[Dict[str, Any]] = None, fallback_where: bool = False
     ) -> List[Dict[str, Any]]:
         """Hybrid retrieval: BM25 (keyword) + Dense (semantic) → RRF fusion.
         
@@ -1417,35 +1375,53 @@ class UTCRAGPipeline:
 
         embedder = self.load_embedder()
         col_count = self.collection.count()
+        candidate_count = min(col_count, max(top_k * 3, 15))
 
         # ── Dense (semantic) search ──
-        search_query = self._expand_query(query) if expand else query
-        query_vec = embedder.encode([search_query])
+        # DENSE Vector MUST use the original natural query
+        query_vec = embedder.encode([query])
         dense_results = self.collection.query(
             query_embeddings=query_vec,
-            n_results=min(col_count, max(top_k * 3, 15)),
+            n_results=candidate_count,
             include=["documents", "metadatas", "distances"],
+            where=where_filter,
         )
+
+        fallback_results = None
+        if fallback_where and where_filter:
+            fallback_results = self.collection.query(
+                query_embeddings=query_vec,
+                n_results=max(3, top_k),
+                include=["documents", "metadatas", "distances"],
+            )
 
         # ── BM25 (keyword) search ──
         bm25_ranked = []
         if self.bm25 and self.bm25._built:
-            bm25_ranked = self.bm25.search(query, top_k=min(col_count, top_k * 3))
+            # BM25 ONLY uses the expanded query
+            search_query = self._expand_query(query) if expand else query
+            bm25_ranked = self.bm25.search(search_query, top_k=candidate_count)
 
         # ── RRF Fusion ──
         k_rrf = 60
         fused_map: Dict[str, tuple] = {}
 
-        # Add dense results with RRF
-        ids = dense_results.get("ids") or [[]]
-        if ids and ids[0]:
-            for rank, i in enumerate(range(len(ids[0]))):
-                content = dense_results["documents"][0][i]
-                metadata = dense_results["metadatas"][0][i] or {}
-                chash = hashlib.md5(content.encode()).hexdigest()
-                dist = dense_results["distances"][0][i]
-                rrf = 1.0 / (k_rrf + rank + 1)
-                fused_map[chash] = (metadata, rrf, content, 1.0 - dist)
+        def _add_dense_results(results, penalty=1.0):
+            ids = results.get("ids") or [[]]
+            if ids and ids[0]:
+                for rank, i in enumerate(range(len(ids[0]))):
+                    content = results["documents"][0][i]
+                    metadata = results["metadatas"][0][i] or {}
+                    chash = hashlib.md5(content.encode()).hexdigest()
+                    if chash in fused_map:
+                        continue
+                    dist = results["distances"][0][i]
+                    rrf = (1.0 / (k_rrf + rank + 1)) * penalty
+                    fused_map[chash] = (metadata, rrf, content, (1.0 - dist) * penalty)
+
+        _add_dense_results(dense_results)
+        if fallback_results:
+            _add_dense_results(fallback_results, penalty=0.9)
 
         # Add BM25 results with RRF
         if self.bm25 and bm25_ranked:
@@ -1477,6 +1453,8 @@ class UTCRAGPipeline:
                 "type": metadata.get("type", ""),
                 "pages": metadata.get("pages", ""),
                 "score": rrf_score,
+                "dense_score": _dense_score,
+                "rrf_score": rrf_score,
             })
         return retrieved
 
@@ -1497,10 +1475,10 @@ class UTCRAGPipeline:
             {
                 "role": "user",
                 "content": (
-                    f"NGỮ CẢNH THAM KHẢO:\n{context}\n\n"
-                    f"CÂU HỎI CỦA SINH VIÊN: {question}\n\n"
-                    "Hãy trả lời câu hỏi trên dựa vào ngữ cảnh được cung cấp. "
-                    "Chỉ đưa ra câu trả lời cuối cùng."
+                    "Hãy mở đầu quá trình suy nghĩ của bạn bằng cụm từ 'Bước 1: Phân tích yêu cầu...'\n\n"
+                    f"NGỮ CẢNH CUNG CẤP:\n{context}\n\n"
+                    f"CÂU HỎI:\n{question}\n\n"
+                    "Dựa vào NGỮ CẢNH CUNG CẤP, hãy đưa ra câu trả lời cuối cùng bằng TIẾNG VIỆT."
                 ),
             },
         ]

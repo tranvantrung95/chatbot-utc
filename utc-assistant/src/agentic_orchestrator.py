@@ -31,9 +31,10 @@ class AgenticOrchestrator:
             {
                 "role": "user",
                 "content": (
-                    f"NGỮ CẢNH THAM KHẢO:\n{context_text}\n\n"
-                    f"CÂU HỎI CỦA SINH VIÊN: {question}\n\n"
-                    "Hãy thực hiện toàn bộ quá trình suy nghĩ (thinking) bằng tiếng Việt và trả lời câu hỏi trên bằng tiếng Việt dựa vào ngữ cảnh được cung cấp. Chỉ đưa ra câu trả lời cuối cùng."
+                    "Hãy mở đầu quá trình suy nghĩ của bạn bằng cụm từ 'Bước 1: Phân tích yêu cầu...'\n\n"
+                    f"NGỮ CẢNH CUNG CẤP:\n{context_text}\n\n"
+                    f"CÂU HỎI:\n{question}\n\n"
+                    "Dựa vào NGỮ CẢNH CUNG CẤP, hãy đưa ra câu trả lời cuối cùng bằng TIẾNG VIỆT."
                 ),
             },
         ]

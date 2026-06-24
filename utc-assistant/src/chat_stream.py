@@ -1,6 +1,7 @@
 """Streaming SSE endpoint cho chat + thinking real-time."""
 import json
-from typing import AsyncGenerator
+import asyncio
+from typing import AsyncGenerator, Generator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -34,7 +35,8 @@ async def api_chat_stream(
     question = payload.question.strip()
     started_at = now_epoch()
     pipeline = get_pipeline(settings)
-    execution = resolve_chat_execution_plan(
+    execution = await asyncio.to_thread(
+        resolve_chat_execution_plan,
         pipeline,
         question=question,
         current_user=current_user,
@@ -44,40 +46,44 @@ async def api_chat_stream(
     student_ctx = execution["student_ctx"]
 
     # Multi-turn: load conversation history from SQLite (with summarization for long chats)
-    conv_history = ""
-    if payload.conversation_id:
-        try:
-            from src.database import get_db
-            from src.conversation_summarizer import ConversationSummarizer
-            
-            summarizer = ConversationSummarizer(pipeline)
-            if summarizer.should_summarize(payload.conversation_id):
-                # Long conversation: summarize old + keep recent
-                summary, recent = summarizer.build_context(payload.conversation_id)
-                if summary:
-                    conv_history = f"TÓM TẮT HỘI THOẠI TRƯỚC ĐÓ:\n{summary}\n\n{recent}\n\n"
+    def load_history() -> str:
+        h = ""
+        if payload.conversation_id:
+            try:
+                from src.database import get_db
+                from src.conversation_summarizer import ConversationSummarizer
+                
+                summarizer = ConversationSummarizer(pipeline)
+                if summarizer.should_summarize(payload.conversation_id):
+                    # Long conversation: summarize old + keep recent
+                    summary, recent = summarizer.build_context(payload.conversation_id)
+                    if summary:
+                        h = f"TÓM TẮT HỘI THOẠI TRƯỚC ĐÓ:\n{summary}\n\n{recent}\n\n"
+                    else:
+                        h = f"{recent}\n\n"
                 else:
-                    conv_history = f"{recent}\n\n"
-            else:
-                # Short conversation: full history
-                conn = get_db()
-                rows = conn.execute(
-                    "SELECT role, content FROM messages WHERE conversation_id=? "
-                    "ORDER BY created_at ASC",
-                    (payload.conversation_id,)
-                ).fetchall()
-                conn.close()
-                if rows:
-                    history_parts = []
-                    for role, content in rows:
-                        label = "Sinh viên" if role == "student" else "Trợ lý"
-                        history_parts.append(f"{label}: {content}")
-                    if history_parts:
-                        conv_history = "LỊCH SỬ HỘI THOẠI:\n" + "\n".join(history_parts) + "\n\n"
-        except Exception:
-            pass
+                    # Short conversation: full history
+                    conn = get_db()
+                    rows = conn.execute(
+                        "SELECT role, content FROM messages WHERE conversation_id=? "
+                        "ORDER BY created_at ASC",
+                        (payload.conversation_id,)
+                    ).fetchall()
+                    conn.close()
+                    if rows:
+                        history_parts = []
+                        for role, content in rows:
+                            label = "Sinh viên" if role == "student" else "Trợ lý"
+                            history_parts.append(f"{label}: {content}")
+                        if history_parts:
+                            h = "LỊCH SỬ HỘI THOẠI:\n" + "\n".join(history_parts) + "\n\n"
+            except Exception:
+                pass
+        return h
 
-    async def event_stream() -> AsyncGenerator[str, None]:
+    conv_history = await asyncio.to_thread(load_history)
+
+    def event_stream() -> Generator[str, None, None]:
         thinking_buffer = ""
         answer_buffer = ""
 
@@ -148,6 +154,11 @@ async def api_chat_stream(
                 elif content:
                     answer_buffer += content
                     yield f"data: {json.dumps({'type': 'answer', 'content': content})}\n\n"
+
+            latency_sec = round(now_epoch() - started_at, 2)
+            time_msg = f"\n\n*(Thời gian phản hồi: {latency_sec}s)*"
+            answer_buffer += time_msg
+            yield f"data: {json.dumps({'type': 'answer', 'content': time_msg})}\n\n"
 
             # Build sources
             source_items = build_source_items(retrieved)

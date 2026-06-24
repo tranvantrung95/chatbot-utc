@@ -6,7 +6,7 @@
 - completeness: Có bỏ sót thông tin quan trọng không?
 - conciseness: Có lan man, thừa thãi không?
 
-Mỗi chiều: 0.0-1.0, dùng LLM (qwen35-opus) làm judge.
+Mỗi chiều: 0.0-1.0, dùng LLM (qwen36-35b-moe) làm judge.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 JUDGE_PROMPT = """Bạn là giám khảo đánh giá chất lượng câu trả lời của chatbot trợ lý sinh viên UTC.
+Hãy mở đầu quá trình suy nghĩ của bạn (trong thẻ <think>) bằng cụm từ 'Bước 1: Phân tích...'. TẤT CẢ phải bằng TIẾNG VIỆT 100%. Tuyệt đối KHÔNG dùng tiếng Anh.
 
 Đánh giá câu trả lời bên dưới theo 4 tiêu chí. Cho điểm 0.0-1.0 cho mỗi tiêu chí.
 
@@ -40,7 +41,7 @@ TIÊU CHÍ:
 TRẢ LỜI CHỈ BẰNG JSON, ví dụ:
 {{"faithfulness": 0.8, "relevance": 0.9, "completeness": 0.7, "conciseness": 0.8}}
 
-NGỮ CẢNH THAM KHẢO:
+NGỮ CẢNH CUNG CẤP:
 {context}
 
 CÂU HỎI:
@@ -145,7 +146,7 @@ class LLMJudge:
                     "messages": llm._prepare_messages(messages),
                     "temperature": 0.1,
                     "max_tokens": 300,
-                    "enable_thinking": False,
+                    "enable_thinking": True,
                 },
                 timeout=60,
             )

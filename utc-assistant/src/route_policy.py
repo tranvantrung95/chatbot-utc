@@ -7,10 +7,20 @@ from typing import Any, Dict, List, Optional
 
 def build_retrieval_probe(retrieved: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
     retrieved = retrieved or []
-    top1_score = float(retrieved[0].get("score", 0.0)) if retrieved else 0.0
+    if not retrieved:
+        top1_score = 0.0
+    else:
+        first = retrieved[0]
+        if "_llm_score" in first:
+            top1_score = float(first["_llm_score"])
+        elif "dense_score" in first:
+            top1_score = float(first["dense_score"])
+        else:
+            top1_score = float(retrieved[0].get("dense_score", retrieved[0].get("score", 0.0))) if retrieved else 0.0
+            
     result_count = len(retrieved)
     has_web_results = any(item.get("type") == "web" for item in retrieved)
-    is_low_confidence = result_count == 0 or top1_score < 0.035 or result_count < 3
+    is_low_confidence = result_count == 0 or top1_score < 0.55 or result_count < 3
     return {
         "top1_score": round(top1_score, 4),
         "result_count": result_count,

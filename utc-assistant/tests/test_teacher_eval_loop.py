@@ -36,3 +36,28 @@ class StageTimerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class EvalRunnerTests(unittest.TestCase):
+    def test_eval_runner_aggregates_quality_latency_and_advice(self):
+        class FakePipeline:
+            def retrieve(self, q, top_k): return [{"id": "chunk1"}]
+            def query(self, q, top_k): return "fake answer", ""
+
+        class FakeTeacher:
+            def evaluate_one(self, q, a, ret, latency_sec, timings):
+                from src.teacher_evaluator import TeacherAssessment, TeacherScores
+                return TeacherAssessment(
+                    scores=TeacherScores(0.9, 0.9, 0.9, 0.9, 0.5), # overall = 0.9 (since latency is excluded)
+                    error_category="retrieval_miss",
+                    critique="fake critique",
+                    suggestion="fake suggestion"
+                )
+
+        from src.eval_runner import EvalRunner
+        runner = EvalRunner(pipeline=FakePipeline(), teacher=FakeTeacher())
+        report = runner.evaluate_questions([{"id": "Q1", "question": "Học phí đóng thế nào?"}])
+        self.assertEqual(report["summary"]["total"], 1)
+        self.assertEqual(report["summary"]["evaluated"], 1)
+        self.assertEqual(report["summary"]["overall"], 0.9)
+        self.assertEqual(report["summary"]["error_categories"], {"retrieval_miss": 1})
+        self.assertIn("retrieval", report["recommendations"][0]["area"])
